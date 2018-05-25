@@ -9,11 +9,16 @@ import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
 import android.provider.FontsContract;
+import android.support.v4.view.GravityCompat;
+import android.support.v4.widget.DrawerLayout;
+import android.support.v4.widget.SwipeRefreshLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -46,6 +51,12 @@ public class WeatherActivity extends AppCompatActivity {
     private TextView carWashText;
     private TextView sportText;
     private ImageView bingPicImg;
+
+    //    设置成public 可以让其他类直接使用。
+    public SwipeRefreshLayout swipeRefreshLayout;
+    private String mWeatherId;
+    public DrawerLayout drawerLayout;
+    private Button navButton;
 
     private static final int FALSECODE =1001 ;
     private static final int TRUECODE =1002 ;
@@ -84,18 +95,47 @@ public class WeatherActivity extends AppCompatActivity {
         sportText=findViewById(R.id.sport_text);
         bingPicImg=findViewById(R.id.bing_pic_img);
 
-        SharedPreferences sp= PreferenceManager.getDefaultSharedPreferences(WeatherActivity.this);
+//        下拉刷新控件绑定。
+        swipeRefreshLayout=findViewById(R.id.swipe_refresh);
+//        设置下拉刷新的主题样式。
+        swipeRefreshLayout.setColorSchemeResources(R.color.colorPrimary);
 
+        drawerLayout=findViewById(R.id.drawer_layout);
+        navButton=findViewById(R.id.nav_button);
+
+        navButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                drawerLayout.openDrawer(GravityCompat.START);
+            }
+        });
+
+
+//        获得SharedPreferences对象。通过PreferenceManager.getDefaultSharedPreferences(Context类);
+        SharedPreferences sp= PreferenceManager.getDefaultSharedPreferences(WeatherActivity.this);
+//        获取数据通过SharedPreferences对象。通过SharedPreferences对象.getXXX(key,取不到时的默认值);
         String weatherString=sp.getString("weather",null);
 
         if (weatherString!=null){
+//            有缓存时直接解析天气数据
             Weather weather= Utility.handleWeatherResponse(weatherString);
+            mWeatherId=weather.basic.weatherId;
             showWeatherInfo(weather);
         }else {
-            String weatherId=getIntent().getStringExtra("weather_id");
+//            无缓存区服务器查询天气
+            mWeatherId=getIntent().getStringExtra("weather_id");
             weatherLayout.setVisibility(View.INVISIBLE);
-            requestWeather(weatherId);
+            requestWeather(mWeatherId);
         }
+//        设置下拉刷新的事件监听。通过SwipeRefreshLayout对象.setOnRefreshListener();
+        swipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
+            @Override
+            public void onRefresh() {
+                requestWeather(mWeatherId);
+                Toast.makeText(WeatherActivity.this, "重新获取数据成功", Toast.LENGTH_SHORT).show();
+            }
+        });
+
 
         String bingPic=sp.getString("bing_pic",null);
         if (bingPic!=null){
@@ -110,6 +150,7 @@ public class WeatherActivity extends AppCompatActivity {
             public boolean handleMessage(Message msg) {
                 if (msg.what==FALSECODE){
                     Toast.makeText(WeatherActivity.this, "获取天气信息失败", Toast.LENGTH_SHORT).show();
+                    swipeRefreshLayout.setRefreshing(false);
                     return true;
                 }else if (msg.what==TRUECODE){
 //                    SharedPreferences的使用：
@@ -124,6 +165,7 @@ public class WeatherActivity extends AppCompatActivity {
                     editor.putString("weather",responseText);
                     editor.apply();
                     showWeatherInfo((Weather) msg.obj);
+                    swipeRefreshLayout.setRefreshing(false);
                     return true;
                 }else if (msg.what==PICTRUECODE){
                     String bingPic= (String) msg.obj;
@@ -162,7 +204,7 @@ public class WeatherActivity extends AppCompatActivity {
     /*
     * 根据天气id请求城市天气信息。
     * */
-    private void requestWeather(String weatherId) {
+    public void requestWeather(String weatherId) {
         String weatherUrl="http://guolin.tech/api/weather?cityid="+weatherId+"&key=3ab94192e240431d9fae34675bb4a503";
         HttpUtil.sendOkHttpRequest(weatherUrl, new Callback() {
             @Override
